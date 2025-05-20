@@ -5,11 +5,19 @@ const server = require("../server");
 chai.use(chaiHttp);
 const assert = chai.assert;
 
+function isNullOrEmpty(val) {
+  return (
+    val === null ||
+    val === "" ||
+    (Array.isArray(val) && val.length === 0) ||
+    (typeof val === "object" && val !== null && Object.keys(val).length === 0)
+  );
+}
+
 suite("Functional Tests", function () {
-  this.timeout(2000);
+  this.timeout(5000);
 
   const project_name = "chai_project";
-  const now = new Date().toISOString();
   let updated_issue_id;
   let deleted_issue_id;
 
@@ -21,17 +29,28 @@ suite("Functional Tests", function () {
       .send({
         issue_title: "Test 1",
         issue_text: "When we post data it has an error.",
-        created_on: now,
-        updated_on: now,
         created_by: "Chai",
         assigned_to: "Chai",
-        open: true,
         status_text: "just testing stuff",
       })
       .end((req, res) => {
         assert.equal(res.status, 201);
         assert.equal(res.type, "application/json");
-        assert.isNotNull(res.body._id, "res.body is not Null");
+
+        assert.isFalse(isNullOrEmpty(res.body._id), "error in _id");
+        assert.equal(res.body.issue_title, "Test 1");
+        assert.equal(res.body.issue_text, "When we post data it has an error.");
+        assert.equal(res.body.created_by, "Chai");
+        assert.equal(res.body.assigned_to, "Chai");
+        assert.equal(res.body.status_text, "just testing stuff");
+
+        assert.isBoolean(res.body.open, "error in open");
+        assert.isFalse(
+          isNullOrEmpty(res.body.created_on),
+          "error in created_on"
+        );
+        assert.notProperty(res.body, "updated_on", "error in updated_on");
+
         deleted_issue_id = res.body._id;
         done();
       });
@@ -44,13 +63,28 @@ suite("Functional Tests", function () {
       .send({
         issue_title: "Test 2",
         issue_text: "When we post data it has an error.",
-        created_on: now,
-        updated_on: now,
         created_by: "Chai",
-        open: true,
       })
       .end((req, res) => {
         assert.equal(res.status, 201);
+        assert.equal(res.type, "application/json");
+
+        assert.isFalse(isNullOrEmpty(res.body._id), "res.body_id is not Null");
+        assert.equal(res.body.issue_title, "Test 2");
+        assert.equal(res.body.issue_text, "When we post data it has an error.");
+        assert.equal(res.body.created_by, "Chai");
+        assert.equal(res.body.status_text, "just testing stuff");
+        assert.notProperty(res.body, "assigned_to", "error in assigned_to");
+        assert.notProperty(res.body, "status_text", "error in status_text");
+
+        assert.isFalse(
+          isNullOrEmpty(res.body.created_on),
+          "error in created_on"
+        );
+        assert.notProperty(res.body, "updated_on", "error in updated_on");
+        assert.isBoolean(res.body.open, "error in open");
+
+        updated_issue_id = res.body._id;
         done();
       });
   });
@@ -60,15 +94,12 @@ suite("Functional Tests", function () {
       .keepOpen()
       .post("/api/issues/" + project_name)
       .send({
-        created_on: now,
-        updated_on: now,
         created_by: "Chai",
         assigned_to: "Chai",
-        open: true,
         status_text: "just testing stuff",
       })
       .end((req, res) => {
-        assert.equal(res.text, "missing required fields");
+        assert.equal(res.status, 422);
         done();
       });
   });
@@ -77,12 +108,10 @@ suite("Functional Tests", function () {
       .request(server)
       .keepOpen()
       .get("/api/issues/" + project_name)
-      // .send({
-      //   _id: "5871dda29faedc3491ff93bb",
-      // })
       .end((req, res) => {
         assert.equal(res.status, 200);
         assert.equal(res.type, "application/json");
+        assert.isNotNull(res.body, "res.body is null");
         done();
       });
   });
@@ -94,6 +123,7 @@ suite("Functional Tests", function () {
       .end((req, res) => {
         assert.equal(res.status, 200);
         assert.equal(res.type, "application/json");
+        assert.isNotNull(res.body, "res.body is null");
         done();
       });
   });
@@ -105,6 +135,7 @@ suite("Functional Tests", function () {
       .end((req, res) => {
         assert.equal(res.status, 200);
         assert.equal(res.type, "application/json");
+        assert.isNotNull(res.body, "res.body is null");
         done();
       });
   });
@@ -114,18 +145,19 @@ suite("Functional Tests", function () {
       .keepOpen()
       .put("/api/issues/" + project_name)
       .send({
-        _id: issue_id,
-        issue_title: "Fix error in posting data",
-        issue_text: "When we post data it has an error.",
-        created_on: "2017-01-08T06:35:14.240Z",
-        updated_on: "2017-01-08T06:35:14.240Z",
-        created_by: "Joe",
-        assigned_to: "Joe",
-        open: true,
-        status_text: "In QA",
+        _id: updated_issue_id,
+        issue_title: "(updated) Fix error in posting data",
       })
       .end((req, res) => {
-        assert.equal(201, 200);
+        assert.equal(res.status, 200);
+        assert.equal(res.type, "application/json");
+
+        assert.equal(res.body._id, updated_issue_id);
+        assert.equal(
+          res.body.issue_title,
+          "(updated) Fix error in posting data"
+        );
+
         done();
       });
   });
@@ -133,9 +165,28 @@ suite("Functional Tests", function () {
     chai
       .request(server)
       .keepOpen()
-      .get("/api/issues/" + project_name)
+      .put("/api/issues/" + project_name)
+      .send({
+        _id: updated_issue_id,
+        issue_text: "(2nd update) When we post data it has an error.",
+        assigned_to: "(2nd update) Chai",
+        status_text: "(2nd update) In QA",
+      })
       .end((req, res) => {
-        assert.equal(201, 200);
+        assert.equal(res.status, 200);
+        assert.equal(res.type, "application/json");
+
+        assert.equal(res.body._id, updated_issue_id);
+        assert.equal(
+          res.body.issue_title,
+          "(updated) Fix error in posting data"
+        );
+        assert.equal(
+          res.body.issue_text,
+          "(2nd update) When we post data it has an error."
+        );
+        assert.equal(res.body.assigned_to, "(2nd update) Chai");
+        assert.equal(res.body.status_text, "(2nd update) In QA");
         done();
       });
   });
@@ -143,9 +194,14 @@ suite("Functional Tests", function () {
     chai
       .request(server)
       .keepOpen()
-      .get("/api/issues/" + project_name)
+      .put("/api/issues/" + project_name)
+      .send({
+        issue_text: "(2nd update) When we post data it has an error.",
+        assigned_to: "(2nd update) Chai",
+        status_text: "(2nd update) In QA",
+      })
       .end((req, res) => {
-        assert.equal(201, 200);
+        assert.equal(res.status, 422);
         done();
       });
   });
@@ -153,9 +209,19 @@ suite("Functional Tests", function () {
     chai
       .request(server)
       .keepOpen()
-      .get("/api/issues/" + project_name)
+      .put("/api/issues/" + project_name)
+      .send({
+        _id: updated_issue_id,
+      })
       .end((req, res) => {
-        assert.equal(201, 200);
+        assert.equal(res.status, 200);
+        assert.equal(res.type, "application/json");
+
+        assert.equal(res.body._id, updated_issue_id);
+        assert.equal(
+          res.body.issue_title,
+          "(updated) Fix error in posting data"
+        );
         done();
       });
   });
@@ -163,9 +229,12 @@ suite("Functional Tests", function () {
     chai
       .request(server)
       .keepOpen()
-      .get("/api/issues/" + project_name)
+      .put("/api/issues/" + project_name)
+      .send({
+        _id: "invalid_id",
+      })
       .end((req, res) => {
-        assert.equal(201, 200);
+        assert.equal(res.status, 422);
         done();
       });
   });
@@ -173,9 +242,12 @@ suite("Functional Tests", function () {
     chai
       .request(server)
       .keepOpen()
-      .get("/api/issues/" + project_name)
+      .delete("/api/issues/" + project_name)
+      .send({
+        _id: deleted_issue_id,
+      })
       .end((req, res) => {
-        assert.equal(201, 200);
+        assert.equal(res.status, 204);
         done();
       });
   });
@@ -183,9 +255,12 @@ suite("Functional Tests", function () {
     chai
       .request(server)
       .keepOpen()
-      .get("/api/issues/" + project_name)
+      .delete("/api/issues/" + project_name)
+      .send({
+        _id: "invalid_id",
+      })
       .end((req, res) => {
-        assert.equal(201, 200);
+        assert.equal(res.status, 422);
         done();
       });
   });
@@ -193,9 +268,9 @@ suite("Functional Tests", function () {
     chai
       .request(server)
       .keepOpen()
-      .get("/api/issues/" + project_name)
+      .delete("/api/issues/" + project_name)
       .end((req, res) => {
-        assert.equal(201, 200);
+        assert.equal(res.status, 422);
         done();
       });
   });

@@ -29,8 +29,10 @@ module.exports = function (app) {
       let project = req.params.project;
       clog(req.body);
       myDB(async (client) => {
-        const myDataBase = await client.db("database").collection("projects");
-        clog(myDataBase);
+        const myDataBase = await client
+          .db("database")
+          .collection(req.params.project || "chai_project");
+        // clog(myDataBase);
         //  myDataBase.insertOne(
         //     {
         //       username: req.body.username,
