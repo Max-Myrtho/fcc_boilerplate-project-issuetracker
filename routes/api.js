@@ -102,6 +102,7 @@ module.exports = function (app) {
 
         _id = new ObjectId(String(_id));
         delete req.body._id;
+        deleteInvalidValueInObject(req.body);
         clog(req.body);
 
         myDBConnection(async (client) => {
@@ -109,7 +110,7 @@ module.exports = function (app) {
             .db(process.env.MONGO_DATABASE)
             .collection(project);
 
-          if (findTheIssueBy_id(myDataBase, _id) === null)
+          if ((await findTheIssueBy_id(myDataBase, _id)) === null)
             return res.status(404).send("issue_not_found");
 
           const query = { _id };
@@ -118,8 +119,7 @@ module.exports = function (app) {
           const options = { upsert: false };
           const result = await myDataBase.updateOne(query, update, options);
 
-          clog("result");
-          clog(result);
+          // clog(result);
 
           const updated_issue = await myDataBase.findOne({ _id });
           clog("updated_issue");
@@ -149,7 +149,7 @@ module.exports = function (app) {
             .db(process.env.MONGO_DATABASE)
             .collection(project);
 
-          if (findTheIssueBy_id(myDataBase, _id) === null)
+          if ((await findTheIssueBy_id(myDataBase, _id)) === null)
             return res.status(404).send("issue_not_found");
 
           const query = { _id };
@@ -197,4 +197,13 @@ const findTheIssueBy_id = async (dataBase, _id) => {
   clog("What we found for this issue:");
   clog(the_issue);
   return the_issue;
+};
+
+const deleteInvalidValueInObject = async (obj) => {
+  for (let key in obj) {
+    if (obj[key] === "" || obj[key] === null || obj[key] === undefined) {
+      delete obj[key];
+    }
+  }
+  return obj;
 };
