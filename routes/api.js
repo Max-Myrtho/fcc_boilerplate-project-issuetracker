@@ -52,12 +52,17 @@ module.exports = function (app) {
 
     .post(function (req, res) {
       clog(req.body);
-      const { issue_title, issue_text, created_by, assigned_to, status_text } =
-        req.body;
+      const {
+        assigned_to = "",
+        issue_title = "",
+        status_text = "",
+        issue_text = "",
+        created_by = "",
+      } = req.body;
 
       //handling missing value
       if (!issue_title || !issue_text || !created_by)
-        return res.status(422).send("invalid_request");
+        return res.status(422).json({ error: "required field(s) missing" });
 
       try {
         let project =
@@ -67,13 +72,14 @@ module.exports = function (app) {
             .db(process.env.MONGO_DATABASE)
             .collection(project);
           const result = await myDataBase.insertOne({
+            assigned_to,
+            status_text,
+            open: true,
             issue_title,
             issue_text,
-            created_on: now,
             created_by,
-            assigned_to,
-            open: true,
-            status_text,
+            created_on: now,
+            updated_on: now,
           });
           clog("result");
           clog(result);
@@ -96,11 +102,17 @@ module.exports = function (app) {
         let project =
           req.params.project || process.env.DEFAULT_MONGO_COLLECTION;
         let { _id } = req.body;
+        const textual_id = _id;
 
         //handling missing value
-        if (!_id) return res.status(422).send("invalid_request");
+        if (!_id) return res.status(422).json({ error: "missing _id" });
+        if (Object.keys(req.body).length === 1)
+          return res
+            .status(422)
+            .json({ error: "no update field(s) sent", _id: textual_id });
 
         _id = new ObjectId(String(_id));
+        //delete the _id to no update it from ObjectId to string
         delete req.body._id;
         deleteInvalidValueInObject(req.body);
         clog(req.body);
@@ -111,7 +123,9 @@ module.exports = function (app) {
             .collection(project);
 
           if ((await findTheIssueBy_id(myDataBase, _id)) === null)
-            return res.status(404).send("issue_not_found");
+            return res
+              .status(500)
+              .json({ error: "could not update", _id: textual_id });
 
           const query = { _id };
           const update = { $set: { ...req.body, updated_on: now } };
@@ -119,16 +133,23 @@ module.exports = function (app) {
           const options = { upsert: false };
           const result = await myDataBase.updateOne(query, update, options);
 
-          // clog(result);
+          clog(result);
 
-          const updated_issue = await myDataBase.findOne({ _id });
-          clog("updated_issue");
-          clog(updated_issue);
-          return res.json(updated_issue);
+          if (result.modifiedCount === 1)
+            return res.json({
+              result: "successfully updated",
+              _id: textual_id,
+            });
+          else
+            return res
+              .status(500)
+              .json({ error: "could not update", _id: textual_id });
         });
       } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "error_500" });
+        return res
+          .status(500)
+          .json({ error: "could not update", _id: textual_id });
       }
     })
 
@@ -139,7 +160,7 @@ module.exports = function (app) {
         let { _id } = req.body;
 
         //handling missing value
-        if (!_id) return res.status(422).send("invalid_request");
+        if (!_id) return res.status(422).json({ error: "missing _id" });
 
         _id = new ObjectId(String(_id));
         clog(req.body);
@@ -150,7 +171,9 @@ module.exports = function (app) {
             .collection(project);
 
           if ((await findTheIssueBy_id(myDataBase, _id)) === null)
-            return res.status(404).send("issue_not_found");
+            return res
+              .status(500)
+              .json({ error: "could not delete", _id: req.body._id });
 
           const query = { _id };
           const result = await myDataBase.deleteOne(query);
@@ -158,11 +181,20 @@ module.exports = function (app) {
           clog("result");
           clog(result);
 
-          return res.status(204).json(result);
+          if (result.deletedCount === 1)
+            return res
+              .status(200)
+              .json({ result: "successfully deleted", _id: req.body._id });
+          else
+            return res
+              .status(500)
+              .json({ error: "could not delete", _id: req.body._id });
         });
       } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "error_500" });
+        return res
+          .status(500)
+          .json({ error: "could not delete", _id: req.body._id });
       }
     });
 
